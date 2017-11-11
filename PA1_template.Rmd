@@ -5,21 +5,158 @@ output:
     keep_md: true
 ---
 
+## Required libraries
+```{r libraries}
+library(ggplot2)
+library(lubridate)
+```
 
 ## Loading and preprocessing the data
-
-
+```{r dataload}
+## csv file must be in working directory
+rawdf <- read.csv('activity.csv', stringsAsFactors =F)
+```
 
 ## What is mean total number of steps taken per day?
+### Preparing data
+```{r prep1}
+### locate rows with NA values for steps
+na_rows <- is.na(rawdf$steps)
 
+### keep usable data
+df <- rawdf[!na_rows,]
 
+### convert string date field "date" to R date
+df$day <- ymd(df$date)
+```
+
+### Histogram 
+```{r plot1}
+#### number of steps per day
+steps_d <- aggregate(steps~day, data=df, sum)
+g <- ggplot(data=steps_d, aes(steps_d$steps)) 
+g <- g + geom_histogram(binwidth=500)
+g + labs(title = "Histogram of the total number of steps per day"
+         ,x="Steps per day", y="Count")
+```
+
+### mean and median for number of steps per day
+```{r summary1}
+summary1<-summary(steps_d$steps)
+summary1
+```
 
 ## What is the average daily activity pattern?
+### Time series plot of the average number of steps taken
+```{r plot2}
+#### aggregate steps on day and compute mean
+steps_dm <- aggregate(steps~day, data=df, mean)
+g <- ggplot(data=steps_dm, aes(x=day, y=steps)) 
+g <- g + geom_line(size=1)
+g + labs(title = "Time series plot of the average number of steps taken"
+         ,x="day", y="Average count")
+```
 
+### 5 minute interval containing the maximum number of steps
+```{r prep3}
+### aggregate steps on interval and compute mean
+steps_im <- aggregate(steps~interval, data=df, mean)
 
+### index at which max value for steps is found
+i_max <- match(max(steps_im$steps),steps_im$steps )
+```
+
+```{r max}
+### interval containing the maximum number of steps
+steps_im$interval[i_max]
+```
 
 ## Imputing missing values
+### total number of missing values in the dataset
+```{r missing}
+#### rows with NA values were identified earlier with na_rows is.na(rawdf$steps)
+#### there are
+length(na_rows)
+#### missing values
+```
+### Strategy for imputing missing data
+```{r prep4}
+#### missing steps values for intervals are replaced by 
+#### interval average values calculated earlier
 
+#### subset for rows with na values
+df_na <- rawdf[na_rows,]
 
+#### join (merge) data frames df_na and steps_im calculated earlier
+names(df_na)
+names(steps_im)
+df_joined <- merge(df_na[,c(2,3)],steps_im, by="interval" )
+names(df_joined)
+#### convert string date field "date" to R date
+df_joined$day <- ymd(df_joined$date)
+
+#### as names(df) order is different from names(df_joined)
+cols<- intersect( names(df), names(df_joined) )
+
+#### rows with average values are appended
+df <- rbind(df[, cols], df_joined[,cols])
+```
+
+### Histogram of the total number of steps per day after missing values are imputed
+```{r plot3}
+#### aggregate steps on day
+steps_d_filled <- aggregate(steps~day, data=df, sum)
+g <- ggplot(data=steps_d_filled, aes(steps_d_filled$steps)) 
+g <- g + geom_histogram(binwidth=500)
+g + labs(title = "Histogram of the total number of steps per day, with imputed values"
+         ,x="Steps per day", y="Average count")
+```
+
+### mean and median for number of steps per day including imputed valuues
+```{r summary2}
+summary2<-summary(steps_d_filled$steps)
+summary2
+```
+
+### Do mean and median values differ from the estimates from the first part of the assignment?
+```{r compar_mean_median}
+#### without imputed values
+summary1
+#### with imputed values
+summary2
+#### mean remains the same, median differs
+#### we notice an increase of 1 for the nedian
+```
 
 ## Are there differences in activity patterns between weekdays and weekends?
+### preparation
+```{r prep5}
+#### computes numeric day of week (Sunday is 1)
+df$wday <- wday(df$day)
+
+#### create a mapping day to type of day
+day2dtype <- data.frame( wday=sort(unique(df$wday))
+                        ,dtype=c( "WEEKEND","WEEKDAY","WEEKDAY","WEEKDAY"
+                                ,"WEEKDAY","WEEKDAY","WEEKEND"))
+day2dtype
+
+#### join df with mapping
+names(df)
+names(day2dtype)
+df_merged <- merge(df,day2dtype, by="wday")
+names(df_merged)
+```
+
+### Time series plots of the average number of steps taken per interval
+```{r plot4}
+#### average number of steps per 5 minutes interval and day type
+steps_idm <- aggregate(steps~interval+dtype, data=df_merged, mean)
+g <- ggplot(steps_idm, aes(x=interval, y=steps)) 
+g <- g + geom_line(size=1) + facet_wrap(~dtype, ncol=1)
+g + labs(title = "Average number of steps taken per 5 minutes interval across week days and weekends"
+         ,x="Interval", y="Average count")
+```
+
+### Activity patterns between weekdays and weekends differ
+### On weekdays activity peaks in the morning
+### On weekends activity spreads out more evenly during morning and afternoon.
